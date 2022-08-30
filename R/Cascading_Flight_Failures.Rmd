@@ -1,0 +1,176 @@
+---
+title: "190536235_ST2195_Question4: Can you detect cascading failures as delays in one airport create delays in others?"
+output:
+  html_document:
+     df_print: paged
+---
+# Question 4: Can you detect cascading failures as delays in one airport create delays in others?
+
+### Install and load the library
+
+Install and load the `reshape2`` package.
+```{r}
+if (!("reshape2" %in% installed.packages())) {
+  install.packages("reshape2")
+}
+library(reshape2)
+```
+
+Install and load the `dplyr`` package.
+```{r}
+if (!("dplyr" %in% installed.packages())) {
+  install.packages("dplyr")
+}
+library(dplyr)
+```
+
+Install and load the `ggthemes`` package.
+```{r}
+if (!("ggthemes" %in% installed.packages())) {
+  install.packages("ggthemes")
+}
+library(ggthemes)
+```
+
+Install and load the `ggplot2`` package.
+```{r}
+if (!("ggplot2" %in% installed.packages())) {
+  install.packages("ggplot2")
+}
+library(ggplot2)
+```
+
+Install and load the `tidyr`` package.
+```{r}
+if (!("tidyr" %in% installed.packages())) {
+  install.packages("tidyr")
+}
+library(tidyr)
+```
+
+
+### Data pre-processing stage (If data has not previously load from question 1.Rmd)
+Load csv file where header is reflected. Note: results from analysis may slightly differ due to random subset samples.
+```{r}
+ontime_2008 <- read.csv("D:/SIM courses/Programming/Project/2008.csv", header = TRUE)
+ontime_2007 <- read.csv("D:/SIM courses/Programming/Project/2007.csv", header = TRUE)
+ontime2007_2008 <- rbind(ontime_2007, ontime_2008)
+
+airports <- airports <-read.csv("D:/SIM courses/Programming/Project/airports.csv", header = TRUE)
+carriers <- read.csv("D:/SIM courses/Programming/Project/carriers.csv", header = TRUE)
+planes <- read.csv("D:/SIM courses/Programming/Project/plane-data.csv", header = TRUE)
+
+```
+
+Randomly subset 30% of the data set due to constraint on computer system, check and remove missing values. Additionally, remove unused data frames to free up spaces.    
+```{r}
+ontime <- ontime2007_2008 %>% sample_frac(0.3)
+class(ontime)
+sum(is.na(ontime))
+
+rm(ontime_2007, ontime_2008, ontime2007_2008)
+```
+
+Assumption made on the criteria for outliers on departure and arrival delay to be removed when it exceeds 240 minutes (4hours) based on airline policies.
+```{r}
+df <- ontime %>%
+  rename_all(tolower) %>%
+  filter(depdelay<240 & arrdelay<240)
+```
+References: https://www.citizensadvice.org.uk/consumer/holiday-cancellations-and-compensation/if-your-flights-delayed-or-cancelled/
+
+
+
+### Data Query
+#### Question 4: Can you detect cascading failures as delays in one airport create delays in others?
+To detect cascading failures of delays, data set has been filtered to only include non-cancelled flights that has departure delays more than 0minutes and calculates its average departure delays. 
+```{r}
+q4 <- df %>%
+  rename_all(tolower) %>%
+  select(origin, dest, depdelay, cancelled, dayofmonth, month, year, deptime, crsdeptime) %>% 
+  filter(cancelled==0, depdelay >0) %>%
+  group_by(dest ,origin, month, year, dayofmonth, deptime, crsdeptime) %>% 
+  summarize(mean_depdelay = mean(depdelay))
+q4
+```
+
+To analyze in-depth on cascading failures, data has been filtered to compare the average departure delays on 1st day of the month for 2007 and 2008.
+```{r}
+q4.1 <- q4 %>% filter(dayofmonth==1, month==1, year==2007) 
+q4.1 <- q4.1 %>% group_by(dest) %>% top_n(1)
+q4.1 <- head(q4.1,100, mean_depdelay)
+q4.1
+
+q4.2 <- q4 %>% filter(dayofmonth==1, month==1, year==2008) 
+q4.2 <- q4.2 %>% group_by(dest) %>% top_n(1)
+q4.2 <- head(q4.2,100,mean_depdelay)
+q4.2
+
+```
+
+Install and load the `igraph`` package.
+```{r}
+if (!("igraph" %in% installed.packages())) {
+  install.packages("igraph")
+}
+library(igraph)
+```
+
+Plot network graph to show cascading failures of departure delay affecting from origin to destination on the 1st day of the month.
+```{r}
+
+edgelist <- as.matrix(q4.1[c("origin", "dest")]) 
+g_1 <- graph.edgelist(edgelist, direct=TRUE) 
+E(g_1)
+V(g_1)
+g_1 <- simplify(g_1)
+print(g_1, e=TRUE, v=TRUE)
+
+plot.igraph(g_1, 
+            edge.arrow.size=0.3,
+            edge.curved=FALSE,
+            edge.width=E(g_1)$mean_depdelay,
+            edge.attribute=E(g_1)$mean_depdelay, 
+            edge.color = "#FF847C",
+            vertex.size=2,
+            vertex.color=NA, 
+            vertex.frame.color=NA, 
+            vertex.label=V(g_1)$name,
+            vertex.label.cex=1,
+            layout=layout.circle,
+            asp = 0.6,
+            margin= -0.1
+)
+title("Departure Delay of Origin to Dest for 1st January 2007")
+```
+
+Plot network graph to show cascading failures of departure delay affecting from origin to destination airport on the 2nd day of the month.
+```{r}
+edgelist <- as.matrix(q4.2[c("origin", "dest")]) 
+g_2 <- graph.edgelist(edgelist, direct=TRUE) 
+E(g_2)
+V(g_2)
+g_2 <- simplify(g_2)
+print(g_1, e=TRUE, v=TRUE)
+
+plot.igraph(g_2, 
+            edge.arrow.size=0.3,
+            edge.curved=FALSE,
+            edge.width=E(g_2)$mean_depdelay,
+            edge.attribute=E(g_2)$mean_depdelay, 
+            edge.color = "#FF847C",
+            vertex.size=2,
+            vertex.color=NA, 
+            vertex.frame.color=NA, 
+            vertex.label=V(g_2)$name,
+            vertex.label.cex=1,
+            layout=layout.circle,
+            asp = 0.6,
+            margin= -0.1
+)
+title("Departure Delay of Origin to Dest for 1st January 2008")
+```
+
+
+References: 
+Citizensadvice.org.uk. 2022. Claim compensation if your flight's delayed or cancelled. [online] Available at: <https://www.citizensadvice.org.uk/consumer/holiday-cancellations-and-compensation/if-your-flights-delayed-or-cancelled/> [Accessed 12 March 2022]. 
